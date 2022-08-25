@@ -5,7 +5,7 @@ Add joplin token to $token
 
 Add filepath to $filepath
 
-Call script ./AutoJoplin.ps1 -hostname 10.10.10.10
+Call script ./AutoJoplin.ps1 -hostname 10.10.10.100
 
 
 
