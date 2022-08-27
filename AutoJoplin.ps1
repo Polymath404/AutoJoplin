@@ -1,8 +1,7 @@
 param($hostname)
 
-
 # TOKEN
-$token = "ENTER JOPLIN TOKEN"
+$token = ""
 
 # API URIs
 $joplinNoteUrl = "http://localhost:41184/notes?token=$($token)"
@@ -11,7 +10,7 @@ $joplinFolderUrl = "http://localhost:41184/folders?token=$($token)"
 
 
 # FILEPATH TO AUTORECON SCANS FOLDER
-$filepath = "ENTER FILEPATH TO AUTORECON SCANS FOLDER"
+$filepath = ""
 
 
 # Call this to get initial and updated folder lists
@@ -105,8 +104,7 @@ function GetScanFiles{
         [string]$filepath
     )
     $filepath = Join-Path -Path $filepath -ChildPath $hostname
-    $files = Get-ChildItem -Path  "$filepath/scans" -Recurse -Attributes !Directory
-    $fileNmapFull = $files| Where-Object BaseName -eq "_full_tcp_nmap"
+    $directories = Get-ChildItem -Path  "$filepath/scans"  
 
     try{
         CreateNotebook -title $hostname
@@ -115,49 +113,38 @@ function GetScanFiles{
         CreateNotebook -title "Ports" -parentNotebook $hostID
         $portID = ((GetJoplinFolders) | Where-Object parent_id -eq $hostID | Where-Object title -eq "Ports").id
 
-        CreateNotebook -title "Unsorted" -parentNotebook $portID
-        $unsortedID = ((GetJoplinFolders) | Where-Object parent_id -eq $portID | Where-Object title -eq "Unsorted").id
+        CreateNotebook -title "Other" -parentNotebook $portID
+        $OtherID = ((GetJoplinFolders) | Where-Object parent_id -eq $portID | Where-Object title -eq "Other").id
 
     }
     catch{
-        Write-Host "Notebook already exists!!!"
+        Write-Host $Error[0]
     }
 
-    if($fileNmapFull){
-        $message = Get-Content $fileNmapFull
-        foreach($line in $message){
-            $line
-            if($line -match "^\d+.tcp"){
-                $port = ($line.Split())[0]
-                CreateNotebook -title $port -parentNotebook $portID
+
+    foreach($directory in $directories){
+
+        if ($directory.Attributes -eq 'Directory') {
+            if(!($directory.Name -eq 'xml')){
+                CreateNotebook -title ($directory.Name) -parentNotebook $portID
+                $id = ((GetJoplinFolders) | Where-Object parent_id -eq $portID | Where-Object title -eq ($directory.Name)).id
+
+                foreach($file in $($directory.EnumerateFiles())){
+                    $title = $file.BaseName
+                    $message = Get-Content $file -Raw
+
+                    CreateNote -notebook $id -title $title -message $message
+                }
             }
         }
-    }
+        elseif($directory.Attributes -ne 'Directory'){
+            $title = $directory.BaseName
+            $message = Get-Content $directory -Raw
 
-
-    foreach($file in $files){
-        $title = $file.Basename
-        $message = Get-Content $file -Raw 
-
-        $joplinFolders = GetJoplinFolders
-        # Creates the notes and places in proper notebook
-        if ($title -like "smb*") {
-            $smbNotebook = ($joplinFolders | Where-Object parent_id -eq $portID | Where-Object title -eq "445/tcp").id
-
-            CreateNote -notebook $smbNotebook -title $title -message $message
-        }
-        elseif ($title -match "(tcp|udp)_\d+.*") {
-            $portNum = ($title.Split("_"))[1]
-            $portFolder = ($joplinFolders | Where-Object parent_id -eq $portID | Where-Object title -like "$portNum*").id
-
-            CreateNote -notebook $portFolder -title $title -message $message
-        }
-        else{
-            CreateNote -notebook $unsortedID -title $title -message $message
+            CreateNote -notebook $OtherID -title $title -message $message
         }
     }
 }
-
 GetScanFiles -filepath $filepath -hostname $hostname
 
 
